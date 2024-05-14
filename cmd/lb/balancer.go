@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/roman-mazur/architecture-practice-4-template/httptools"
@@ -14,21 +16,76 @@ import (
 )
 
 var (
-	port = flag.Int("port", 8090, "load balancer port")
+	port       = flag.Int("port", 8090, "load balancer port")
 	timeoutSec = flag.Int("timeout-sec", 3, "request timeout time in seconds")
-	https = flag.Bool("https", false, "whether backends support HTTPs")
+	https      = flag.Bool("https", false, "whether backends support HTTPs")
 
 	traceEnabled = flag.Bool("trace", false, "whether to include tracing information into responses")
 )
 
 var (
-	timeout = time.Duration(*timeoutSec) * time.Second
+	mutex       sync.Mutex
+	timeout     = time.Duration(*timeoutSec) * time.Second
 	serversPool = []string{
 		"server1:8080",
 		"server2:8080",
 		"server3:8080",
 	}
 )
+
+type Server struct {
+	address  string
+	busyness int
+}
+
+func (s *Server) AddReq() {
+	mutex.Lock()
+	defer mutex.Unlock()
+	s.busyness += 1
+}
+
+func (s *Server) CloseReq() {
+	if s.busyness == 0 {
+		log.Println("Failed attempt to close a session that does not exist")
+		return
+	}
+	mutex.Lock()
+	defer mutex.Unlock()
+	s.busyness -= 1
+}
+
+type Servers struct {
+	list []*Server
+}
+
+func (s *Servers) GetServerIndex(srv Server) (int, error) {
+	for i := range s.list {
+		if s.list[i].address == srv.address &&
+			s.list[i].busyness == srv.busyness {
+			return i, nil
+		}
+	}
+	return -1, errors.New("The specified Server does not exist")
+}
+
+func (s *Servers) IsServerOnList(srv Server) bool {
+	for i := range s.list {
+		if s.list[i].address == srv.address &&
+			s.list[i].busyness == srv.busyness {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Servers) RemoveServerFromList(srv Server) {
+	index, err := s.GetServerIndex(srv)
+	if err != nil {
+		log.Printf("Failed to remove Server: %s", err)
+		return
+	}
+	s.list = append(s.list[:index], s.list[index+1:]...)
+}
 
 func scheme() string {
 	if *https {
@@ -84,22 +141,57 @@ func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
 	}
 }
 
-func main() {
-	flag.Parse()
+func selectLessBusyServer(servers []*Server) (*Server, error) {
+	if len(servers) == 0 {
+		return nil, errors.New("Servers are not available")
+	}
+	lessBusyServer := servers[0]
 
-	// TODO: Використовуйте дані про стан сервреа, щоб підтримувати список тих серверів, яким можна відправляти ззапит.
-	for _, server := range serversPool {
-		server := server
+	for i := range servers {
+		if lessBusyServer.busyness > servers[i].busyness {
+			lessBusyServer = servers[i]
+		}
+	}
+
+	return lessBusyServer, nil
+}
+
+func checkServersHealth(servers *Servers) {
+	for _, addr := range serversPool {
+		availableServer := Server{addr, 0}
+		servers.list = append(servers.list, &availableServer)
 		go func() {
 			for range time.Tick(10 * time.Second) {
-				log.Println(server, health(server))
+				serverHealthy := health(availableServer.address)
+				if !serverHealthy {
+					servers.RemoveServerFromList(availableServer)
+				}
+				if serverHealthy && !servers.IsServerOnList(availableServer) {
+					servers.list = append(servers.list, &availableServer)
+				}
+				log.Println(availableServer.address, serverHealthy)
 			}
 		}()
 	}
+}
+
+func main() {
+	flag.Parse()
+	var servers Servers
+
+	checkServersHealth(&servers)
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		// TODO: Рееалізуйте свій алгоритм балансувальника.
-		forward(serversPool[0], rw, r)
+		server, err := selectLessBusyServer(servers.list)
+		if err != nil {
+			log.Printf("Failed to send a request: %s", err)
+			return
+		}
+		server.AddReq()
+		err = forward(server.address, rw, r)
+		if err == nil {
+			server.CloseReq()
+		}
 	}))
 
 	log.Println("Starting load balancer...")
