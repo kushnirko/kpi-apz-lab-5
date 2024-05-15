@@ -94,7 +94,10 @@ func scheme() string {
 	return "http"
 }
 
-func health(dst string) bool {
+type Health struct {
+}
+
+func (h Health) health(dst string) bool {
 	ctx, _ := context.WithTimeout(context.Background(), timeout)
 	req, _ := http.NewRequestWithContext(ctx, "GET",
 		fmt.Sprintf("%s://%s/health", scheme(), dst), nil)
@@ -141,33 +144,51 @@ func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
 	}
 }
 
-func selectLessBusyServer(servers []*Server) (*Server, error) {
-	if len(servers) == 0 {
+type Balancer struct {
+	checker          HealthChecker
+	checkRate        int
+	availableServers Servers
+}
+
+type HealthChecker interface {
+	health(dst string) bool
+}
+
+func (b *Balancer) getAvailableServers(pool []string) {
+	for _, addr := range pool {
+		availableServer := Server{addr, 0}
+		b.availableServers.list = append(b.availableServers.list, &availableServer)
+	}
+}
+
+func (b *Balancer) selectLessBusyServer() (*Server, error) {
+	if len(b.availableServers.list) == 0 {
 		return nil, errors.New("Servers are not available")
 	}
-	lessBusyServer := servers[0]
+	lessBusyServer := b.availableServers.list[0]
 
-	for i := range servers {
-		if lessBusyServer.busyness > servers[i].busyness {
-			lessBusyServer = servers[i]
+	for i := range b.availableServers.list {
+		if lessBusyServer.busyness > b.availableServers.list[i].busyness {
+			lessBusyServer = b.availableServers.list[i]
 		}
 	}
 
 	return lessBusyServer, nil
 }
 
-func checkServersHealth(servers *Servers) {
-	for _, addr := range serversPool {
-		availableServer := Server{addr, 0}
-		servers.list = append(servers.list, &availableServer)
+func (b *Balancer) MonitorServersState() {
+	servers := &b.availableServers
+
+	for i := range servers.list {
+		availableServer := servers.list[i]
 		go func() {
-			for range time.Tick(10 * time.Second) {
-				serverHealthy := health(availableServer.address)
-				if !serverHealthy {
-					servers.RemoveServerFromList(availableServer)
+			for range time.Tick(time.Duration(b.checkRate) * time.Second) {
+				serverHealthy := b.checker.health(availableServer.address)
+				if !serverHealthy && servers.IsServerOnList(*availableServer) {
+					servers.RemoveServerFromList(*availableServer)
 				}
-				if serverHealthy && !servers.IsServerOnList(availableServer) {
-					servers.list = append(servers.list, &availableServer)
+				if serverHealthy && !servers.IsServerOnList(*availableServer) {
+					servers.list = append(servers.list, availableServer)
 				}
 				log.Println(availableServer.address, serverHealthy)
 			}
@@ -177,12 +198,18 @@ func checkServersHealth(servers *Servers) {
 
 func main() {
 	flag.Parse()
-	var servers Servers
 
-	checkServersHealth(&servers)
+	Balancer := &Balancer{
+		checker:          Health{},
+		checkRate:        10,
+		availableServers: Servers{},
+	}
+
+	Balancer.getAvailableServers(serversPool)
+	Balancer.MonitorServersState()
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		server, err := selectLessBusyServer(servers.list)
+		server, err := Balancer.selectLessBusyServer()
 		if err != nil {
 			log.Printf("Failed to send a request: %s", err)
 			return
