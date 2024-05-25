@@ -10,10 +10,16 @@ import (
 	"github.com/kushnirko/kpi-apz-lab-4/logger"
 )
 
-var target = flag.String("target", "http://localhost:8090", "request target")
+var (
+	target = flag.String("target", "http://localhost:8090", "request target")
+
+	logEnabled = flag.Bool("log", true, "whether to write logs to stdout")
+)
 
 func main() {
 	flag.Parse()
+	logger.Init(*logEnabled)
+
 	client := new(http.Client)
 	client.Timeout = 10 * time.Second
 
