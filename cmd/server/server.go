@@ -9,15 +9,23 @@ import (
 	"time"
 
 	"github.com/kushnirko/kpi-apz-lab-4/httptools"
+	"github.com/kushnirko/kpi-apz-lab-4/logger"
 	"github.com/kushnirko/kpi-apz-lab-4/signal"
 )
 
-var port = flag.Int("port", 8080, "server port")
+var (
+	port = flag.Int("port", 8080, "server port")
+
+	logEnabled = flag.Bool("log", true, "whether to write logs to stdout")
+)
 
 const confResponseDelaySec = "CONF_RESPONSE_DELAY_SEC"
 const confHealthFailure = "CONF_HEALTH_FAILURE"
 
 func main() {
+	flag.Parse()
+	logger.Init(*logEnabled)
+
 	h := new(http.ServeMux)
 
 	h.HandleFunc("/health", func(rw http.ResponseWriter, r *http.Request) {

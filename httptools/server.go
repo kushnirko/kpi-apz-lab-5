@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/kushnirko/kpi-apz-lab-4/logger"
 )
 
 type Server interface {
@@ -17,7 +19,7 @@ type server struct {
 
 func (s server) Start() {
 	go func() {
-		log.Println("Staring the HTTP server...")
+		logger.Println("Staring the HTTP server...")
 		err := s.httpServer.ListenAndServe()
 		log.Fatalf("HTTP server finished: %s. Finishing the process.", err)
 	}()

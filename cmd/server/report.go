@@ -2,8 +2,9 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
+
+	"github.com/kushnirko/kpi-apz-lab-4/logger"
 )
 
 const reportMaxLen = 100
@@ -13,7 +14,7 @@ type Report map[string][]string
 func (r Report) Process(req *http.Request) {
 	author := req.Header.Get("lb-author")
 	counter := req.Header.Get("lb-req-cnt")
-	log.Printf("GET some-data from [%s] request [%s]", author, counter)
+	logger.Printf("GET some-data from [%s] request [%s]", author, counter)
 
 	if len(author) > 0 {
 		list := r[author]

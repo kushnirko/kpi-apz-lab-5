@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kushnirko/kpi-apz-lab-4/httptools"
+	"github.com/kushnirko/kpi-apz-lab-4/logger"
 	"github.com/kushnirko/kpi-apz-lab-4/signal"
 )
 
@@ -21,6 +22,7 @@ var (
 	https      = flag.Bool("https", false, "whether backends support HTTPs")
 
 	traceEnabled = flag.Bool("trace", false, "whether to include tracing information into responses")
+	logEnabled   = flag.Bool("log", true, "whether to write logs to stdout")
 )
 
 var (
@@ -129,7 +131,7 @@ func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
 		if *traceEnabled {
 			rw.Header().Set("lb-from", dst)
 		}
-		log.Println("fwd", resp.StatusCode, resp.Request.URL)
+		logger.Println("fwd", resp.StatusCode, resp.Request.URL)
 		rw.WriteHeader(resp.StatusCode)
 		defer resp.Body.Close()
 		_, err := io.Copy(rw, resp.Body)
@@ -190,7 +192,7 @@ func (b *Balancer) MonitorServersState() {
 				if serverHealthy && !servers.IsServerOnList(*availableServer) {
 					servers.list = append(servers.list, availableServer)
 				}
-				log.Println(availableServer.address, serverHealthy)
+				logger.Println(availableServer.address, serverHealthy)
 			}
 		}()
 	}
@@ -198,6 +200,7 @@ func (b *Balancer) MonitorServersState() {
 
 func main() {
 	flag.Parse()
+	logger.Init(*logEnabled)
 
 	Balancer := &Balancer{
 		checker:          Health{},
@@ -221,8 +224,8 @@ func main() {
 		}
 	}))
 
-	log.Println("Starting load balancer...")
-	log.Printf("Tracing support enabled: %t", *traceEnabled)
+	logger.Println("Starting load balancer...")
+	logger.Printf("Tracing support enabled: %t", *traceEnabled)
 	frontend.Start()
 	signal.WaitForTerminationSignal()
 }
