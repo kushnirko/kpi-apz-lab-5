@@ -18,6 +18,7 @@ var client = http.Client{
 }
 
 // Балансувальник з алгоритмом на найменшу кількість з'єднань має розподілити запити між усіма доступними серверами.
+// За статистикою, перший сервер зі списку доступних оброблює найбільше запитів, другий - трохи менше і так далі.
 // Проте якщо якийсь із серверів обробив замало чи забагато запитів, слід вважати, що балансувальник працює неправильно.
 func TestBalancer(t *testing.T) {
 	if _, exists := os.LookupEnv("INTEGRATION_TEST"); !exists {
@@ -26,7 +27,15 @@ func TestBalancer(t *testing.T) {
 
 	clientsNum := 3
 	requestsNum := 120
-	rc := ResponseCounter{serverCts: make(map[string]int)}
+	rc := ResponseCounter{
+		cts: map[string]struct {
+			actual, expected int
+		}{
+			"server1:8080": {expected: 50},
+			"server2:8080": {expected: 40},
+			"server3:8080": {expected: 30},
+		},
+	}
 
 	wg := sync.WaitGroup{}
 	for i := 0; i < clientsNum; i++ {
@@ -53,26 +62,28 @@ func TestBalancer(t *testing.T) {
 	}
 	wg.Wait()
 
-	avgResponsesPerServer := requestsNum / len(rc.serverCts)
-	for server, responsesNum := range rc.serverCts {
-		t.Logf("server %s processed %d requests", server, responsesNum)
-		ratio := float64(responsesNum) / float64(avgResponsesPerServer)
-		assert.InDelta(t, 1, ratio, 0.5,
+	for server, ct := range rc.cts {
+		t.Logf("server %s processed %d requests", server, ct.actual)
+		assert.InDelta(t, ct.expected, ct.actual, 20,
 			"number of requests to server is outside permissible range",
 		)
 	}
 }
 
 type ResponseCounter struct {
-	serverCts map[string]int
-	mu        sync.Mutex
+	cts map[string]struct {
+		actual, expected int
+	}
+	mu sync.Mutex
 }
 
 func (rc *ResponseCounter) Increment(server string) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
-	rc.serverCts[server]++
+	ct := rc.cts[server]
+	ct.actual++
+	rc.cts[server] = ct
 }
 
 func BenchmarkBalancer(b *testing.B) {
