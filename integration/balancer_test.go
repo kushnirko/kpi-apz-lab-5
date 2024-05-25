@@ -76,5 +76,17 @@ func (rc *ResponseCounter) Increment(server string) {
 }
 
 func BenchmarkBalancer(b *testing.B) {
-	// TODO: Реалізуйте інтеграційний бенчмарк для балансувальникка.
+	if _, exists := os.LookupEnv("INTEGRATION_TEST"); !exists {
+		b.Skip("Integration benchmark is not enabled")
+	}
+
+	for i := 0; i < b.N; i++ {
+		url := fmt.Sprintf("%s/api/v1/some-data", baseAddress)
+		resp, err := client.Get(url)
+		assert.NoError(b, err)
+		assert.Equal(b, http.StatusOK, resp.StatusCode,
+			"bad response status",
+		)
+		resp.Body.Close()
+	}
 }
