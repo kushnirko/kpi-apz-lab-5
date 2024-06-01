@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kushnirko/kpi-apz-lab-4/logger"
+	"github.com/kushnirko/kpi-apz-lab-5/logger"
 )
 
 type Server interface {

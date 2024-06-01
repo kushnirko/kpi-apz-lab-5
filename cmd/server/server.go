@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/kushnirko/kpi-apz-lab-4/httptools"
-	"github.com/kushnirko/kpi-apz-lab-4/logger"
-	"github.com/kushnirko/kpi-apz-lab-4/signal"
+	"github.com/kushnirko/kpi-apz-lab-5/httptools"
+	"github.com/kushnirko/kpi-apz-lab-5/logger"
+	"github.com/kushnirko/kpi-apz-lab-5/signal"
 )
 
 var (

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/kushnirko/kpi-apz-lab-4/logger"
+	"github.com/kushnirko/kpi-apz-lab-5/logger"
 )
 
 const reportMaxLen = 100

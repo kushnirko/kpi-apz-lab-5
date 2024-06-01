@@ -5,7 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/kushnirko/kpi-apz-lab-4/logger"
+	"github.com/kushnirko/kpi-apz-lab-5/logger"
 )
 
 func WaitForTerminationSignal() {

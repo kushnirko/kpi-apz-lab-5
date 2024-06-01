@@ -1,4 +1,4 @@
-module github.com/kushnirko/kpi-apz-lab-4
+module github.com/kushnirko/kpi-apz-lab-5
 
 go 1.22
 
