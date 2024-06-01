@@ -67,3 +67,20 @@ func readValue(in *bufio.Reader) (string, error) {
 
 	return string(data), nil
 }
+
+func readRecord(in *bufio.Reader) ([]byte, error) {
+	header, err := in.Peek(4)
+	if err != nil {
+		return nil, err
+	}
+	recordSize := int(binary.LittleEndian.Uint32(header))
+	data := make([]byte, recordSize)
+	n, err := in.Read(data)
+	if err != nil {
+		return nil, err
+	}
+	if n != recordSize {
+		return nil, fmt.Errorf("can't read record bytes (read %d, expected %d)", n, recordSize)
+	}
+	return data, nil
+}
