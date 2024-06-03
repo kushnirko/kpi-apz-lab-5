@@ -179,4 +179,109 @@ func TestDb_Put(t *testing.T) {
 			t.Errorf("Incorrectly created files")
 		}
 	})
+
+	t.Run("incorrect type", func(t *testing.T) {
+		err = db.PutInt64("keyI", 42)
+		if err != nil {
+			t.Errorf("Cannot put %s: %s", any(pairs[0]).(string), err)
+		}
+		_, err := db.Get("keyI")
+		if err.Error() != "Value does not match expected type: string" {
+			t.Errorf("Unexpected error")
+		}
+	})
+}
+
+func TestDb_Put_Int64_Values(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test-db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	db, err := NewDb(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	pairs := [][]any{
+		{"key1", int64(42)},
+		{"key2", int64(1984)},
+		{"key3", int64(2077)},
+	}
+
+	outFile, err := os.Open(filepath.Join(dir, "segment-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("put/get", func(t *testing.T) {
+		for _, pair := range pairs {
+			err = db.PutInt64(pair[0].(string), pair[1].(int64))
+			if err != nil {
+				t.Errorf("Cannot put %s: %s", any(pairs[0]).(string), err)
+			}
+			value, err := db.GetInt64(pair[0].(string))
+			if err != nil {
+				t.Errorf("Cannot get %s: %s", any(pairs[0]), err)
+			}
+			if value != pair[1].(int64) {
+				t.Errorf("Bad value returned expected %s, got %d", pair[1].(string), value)
+			}
+		}
+	})
+
+	outInfo, err := outFile.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	size1 := outInfo.Size()
+
+	t.Run("file growth", func(t *testing.T) {
+		for _, pair := range pairs {
+			err = db.PutInt64(pair[0].(string), pair[1].(int64))
+		}
+		if err != nil {
+			t.Errorf("Cannot put %s: %s", any(pairs[0]).(string), err)
+		}
+		outInfo, err = outFile.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if size1 != outInfo.Size() {
+			t.Errorf("Unexpected size (%d vs %d)", size1, outInfo.Size())
+		}
+	})
+
+	t.Run("new db process", func(t *testing.T) {
+		if err := db.Close(); err != nil {
+			t.Fatal(err)
+		}
+		db, err = NewDb(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, pair := range pairs {
+			value, err := db.GetInt64(pair[0].(string))
+			if err != nil {
+				t.Errorf("Cannot get %s: %s", any(pairs[0]), err)
+			}
+			if value != pair[1].(int64) {
+				t.Errorf("Bad value returned expected %s, got %d", pair[1].(string), value)
+			}
+		}
+	})
+
+	t.Run("incorrect type", func(t *testing.T) {
+		err = db.Put("keyS", "value")
+		if err != nil {
+			t.Errorf("Cannot put %s: %s", any(pairs[0]).(string), err)
+		}
+		_, err := db.GetInt64("keyS")
+		if err.Error() != "Value does not match expected type: int64" {
+			t.Errorf("Unexpected error")
+		}
+	})
 }
