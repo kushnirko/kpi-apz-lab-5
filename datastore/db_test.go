@@ -51,7 +51,7 @@ func TestDb_Put(t *testing.T) {
 		if err != nil {
 			t.Errorf("Cannot put in file: %s", err)
 		}
-
+		time.Sleep(10 * time.Nanosecond)
 		files, err := os.ReadDir(dir)
 		if err != nil {
 			t.Fatal(err)
@@ -86,7 +86,7 @@ func TestDb_Put(t *testing.T) {
 		if err != nil {
 			t.Errorf("Cannot put in file: %s", err)
 		}
-
+		time.Sleep(10 * time.Nanosecond)
 		outInfo1, err := outFile1.Stat()
 		if err != nil {
 			t.Fatal(err)
@@ -200,7 +200,6 @@ func TestDb_Put(t *testing.T) {
 		filesNumAfterSecondMerge := len(filesAfterSecondMerge)
 		if filesNumAfterSecondMerge != 2 {
 			t.Errorf("The number of created files is not as required. Expected 2, got %d", filesNumAfterSecondMerge)
-			fmt.Println(filesAfterSecondMerge)
 		} else if filesAfterSecondMerge[0].Name() != "segment-1" || filesAfterSecondMerge[1].Name() != "segment-4" {
 			t.Errorf("Incorrectly created files")
 		}

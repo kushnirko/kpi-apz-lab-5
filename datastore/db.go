@@ -23,15 +23,20 @@ var maxFileSize = 10 * 1024 * 1024
 type hashIndex map[string]int64
 
 type Db struct {
-	out            *os.File
-	outPath        string
-	outOffset      int64
-	fileNumber     int
-	segmentNumbers []int
-	dir            string
-	fileReplMu     sync.Mutex
-	mergeMu        sync.Mutex
-	index          hashIndex
+	out             *os.File
+	outPath         string
+	outOffset       int64
+	fileNumber      int
+	segmentNumbers  []int
+	dir             string
+	lastChangedEl   string
+	mergingSegments []string
+	mergeMu         sync.Mutex
+	putCh           chan entry
+	getCh           chan string
+	getOffsetCh     chan int64
+	finishMergeCh   chan hashIndex
+	index           hashIndex
 }
 
 func NewDb(dir string) (*Db, error) {
@@ -41,18 +46,25 @@ func NewDb(dir string) (*Db, error) {
 		return nil, err
 	}
 	db := &Db{
-		outPath:        outputPath,
-		out:            f,
-		index:          make(hashIndex),
-		segmentNumbers: make([]int, 0),
-		fileNumber:     1,
-		dir:            dir,
+		outPath:         outputPath,
+		out:             f,
+		index:           make(hashIndex),
+		segmentNumbers:  make([]int, 0),
+		mergingSegments: make([]string, 0),
+		fileNumber:      1,
+		dir:             dir,
+		putCh:           make(chan entry),
+		getCh:           make(chan string),
+		getOffsetCh:     make(chan int64),
+		finishMergeCh:   make(chan hashIndex),
 	}
 	db.segmentNumbers = db.getSegmentNumbers()
 	err = db.recover()
 	if err != nil && err != io.EOF {
 		return nil, err
 	}
+	go db.OperationMonitor()
+
 	return db, nil
 }
 
@@ -122,33 +134,35 @@ func (db *Db) prepareLastSegment(segment string, fileNumber int) error {
 	return nil
 }
 
+func (db *Db) OperationMonitor() {
+	for {
+		select {
+		case e := <-db.putCh:
+			db.makeRecord(e)
+		case key := <-db.getCh:
+			offset, _ := db.getOffset(key)
+			db.getOffsetCh <- offset
+		case index := <-db.finishMergeCh:
+			err := db.finishMergingSegments(index)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
+	}
+}
+
 func (db *Db) Close() error {
 	return db.out.Close()
 }
 
 func (db *Db) Get(key string) (string, error) {
-	offset, ok := db.index[key]
-	fileNumber := int(math.Floor(float64(db.index[key]/int64(maxFileSize)))) + 1
-	if !db.checkFileExistence(fileNumber) {
-		fileNumber = 1
-	}
-	outPath := filepath.Join(db.dir, outFileName+"-"+strconv.FormatInt(int64(fileNumber), 10))
-	if !ok {
-		return "", ErrNotFound
-	}
-	position := offset - int64((fileNumber-1)*maxFileSize)
-	file, err := os.Open(outPath)
+	db.getCh <- key
+	offset := <-db.getOffsetCh
+	reader, file, err := db.getReaderByOffset(offset)
 	if err != nil {
 		return "", err
 	}
 	defer file.Close()
-
-	_, err = file.Seek(position, 0)
-	if err != nil {
-		return "", err
-	}
-
-	reader := bufio.NewReader(file)
 	value, err := readValue(reader)
 	if err != nil {
 		return "", err
@@ -156,27 +170,57 @@ func (db *Db) Get(key string) (string, error) {
 	return value, nil
 }
 
+func (db *Db) getReaderByOffset(offset int64) (*bufio.Reader, *os.File, error) {
+	fileNumber := int(math.Floor(float64(offset/int64(maxFileSize)))) + 1
+	if !db.checkFileExistence(fileNumber) {
+		fileNumber = 1
+	}
+	position := offset - int64((fileNumber-1)*maxFileSize)
+	outPath := filepath.Join(db.dir, outFileName+"-"+strconv.FormatInt(int64(fileNumber), 10))
+	file, err := os.Open(outPath)
+	if err != nil {
+		return nil, file, err
+	}
+	_, err = file.Seek(position, 0)
+	if err != nil {
+		return nil, file, err
+	}
+	return bufio.NewReader(file), file, nil
+}
+
+func (db *Db) getOffset(key string) (int64, error) {
+	offset, ok := db.index[key]
+	if !ok {
+		return offset, ErrNotFound
+	}
+	return offset, nil
+}
+
 func (db *Db) Put(key, value string) error {
 	e := entry{
 		key:   key,
 		value: value,
 	}
+	db.putCh <- e
+	return nil
+}
+
+func (db *Db) makeRecord(e entry) {
 	fileInfo, err := db.out.Stat()
 	if err != nil {
-		return err
+		return
 	}
 	if int64(len(e.Encode())) > (int64(maxFileSize) - fileInfo.Size()) {
 		err = db.createNewSegment()
 		if err != nil {
-			return err
+			return
 		}
 	}
 	n, err := db.out.Write(e.Encode())
 	if err == nil {
-		db.index[key] = db.outOffset + int64((db.fileNumber-1)*maxFileSize)
+		db.index[e.key] = db.outOffset + int64((db.fileNumber-1)*maxFileSize)
 		db.outOffset += int64(n)
 	}
-	return err
 }
 
 func (db *Db) createNewSegment() error {
@@ -205,82 +249,58 @@ func (db *Db) startMergeProcess() {
 		fmt.Println(err)
 	}
 	if segments != nil {
+		db.mergingSegments = segments
 		hashIndexCopy := db.createHashIndexCopy()
-		if err = db.mergeSegments(hashIndexCopy, segments); err != nil {
+		delete(hashIndexCopy, db.lastChangedEl)
+		if err = db.mergeSegments(hashIndexCopy); err != nil {
 			fmt.Println(err)
 		}
 	}
 }
 
-func (db *Db) mergeSegments(index hashIndex, segments []string) error {
+func (db *Db) mergeSegments(index hashIndex) error {
 	tempFileOutPath := filepath.Join(db.dir, "temp")
 	tempFile, err := os.OpenFile(tempFileOutPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		return err
 	}
-	outPath1 := filepath.Join(db.dir, segments[0])
-	outPath2 := filepath.Join(db.dir, segments[1])
-	file1, err := os.Open(outPath1)
-	if err != nil {
-		return err
-	}
-	file2, err := os.Open(outPath2)
-	if err != nil {
-		return err
-	}
 	outOffset := int64(0)
 	for k, offset := range index {
-		fileNumber := int(math.Floor(float64(offset/int64(maxFileSize)))) + 1
-		if !db.checkFileExistence(fileNumber) {
-			fileNumber = 1
-		}
-		position := offset - int64((fileNumber-1)*maxFileSize)
-		file := file1
-		if fileNumber == 2 {
-			file = file2
-		}
-		_, err = file.Seek(position, 0)
-		if err != nil {
-			fmt.Println(err)
-		}
-		reader := bufio.NewReader(file)
+		reader, file, err := db.getReaderByOffset(offset)
 		record, err := readRecord(reader)
 		if err != nil {
-			fmt.Println("err")
-			fmt.Println(err)
+			return err
 		}
+		file.Close()
 		n, err := tempFile.Write(record)
 		if err == nil {
 			index[k] = outOffset
 			outOffset += int64(n)
 		}
 	}
-	db.fileReplMu.Lock()
-	db.index = index
 	if err = tempFile.Close(); err != nil {
-		fmt.Println(err)
+		return err
 	}
-	if err = file1.Close(); err != nil {
-		fmt.Println(err)
+	db.finishMergeCh <- index
+	return err
+}
+
+func (db *Db) finishMergingSegments(index hashIndex) error {
+	db.index = index
+	for _, segment := range db.mergingSegments {
+		if err := os.Remove(segment); err != nil {
+			return err
+		}
 	}
-	if err = file2.Close(); err != nil {
-		fmt.Println(err)
+	if err := db.recover(); err != nil {
+		return err
 	}
-	if err = os.Remove(segments[0]); err != nil {
-		fmt.Println(err)
-	}
-	if err = os.Remove(segments[1]); err != nil {
-		fmt.Println(err)
-	}
-	if err = db.recover(); err != nil {
-		fmt.Println(err)
-	}
-	if err = os.Rename("temp", segments[0]); err != nil {
-		fmt.Println(err)
+	if err := os.Rename("temp", "segment-1"); err != nil {
+		return err
 	}
 	db.segmentNumbers = db.getSegmentNumbers()
-	db.fileReplMu.Unlock()
-	return err
+	go db.startMergeProcess()
+	return nil
 }
 
 func (db *Db) getAllSegments() ([]string, error) {
