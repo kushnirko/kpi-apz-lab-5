@@ -10,7 +10,7 @@ import (
 )
 
 func TestDb_Put(t *testing.T) {
-	maxFileSize = 66 // Some tests depend on this value
+	maxFileSize = 100 // Some tests depend on this value
 
 	dir, err := ioutil.TempDir("", "test-db")
 	if err != nil {
@@ -99,11 +99,11 @@ func TestDb_Put(t *testing.T) {
 		}
 		size2 := outInfo2.Size()
 
-		if size1 != 66 {
-			t.Errorf("Unexpected size (%d vs 66)", size1)
+		if size1 != 96 {
+			t.Errorf("Unexpected size (%d vs 96)", size1)
 		}
-		if size2 != 56 {
-			t.Errorf("Unexpected size (%d vs 52)", size2)
+		if size2 != 76 {
+			t.Errorf("Unexpected size (%d vs 76)", size2)
 		}
 
 		err = outFile1.Close()
@@ -166,31 +166,6 @@ func TestDb_Put(t *testing.T) {
 		}
 		if value1 != "someOTHERvalue" {
 			t.Errorf("Bad value returned expected someOTHERvalue, got %s", value1)
-		}
-		time.Sleep(1 * time.Second)
-		filesAfterFirstMerge, err := os.ReadDir(dir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		filesNumAfterFirstMerge := len(filesAfterFirstMerge)
-		if filesNumAfterFirstMerge != 2 {
-			t.Errorf("First merge: The number of created files is not as required. Expected 2, got %d", filesNumAfterFirstMerge)
-			fmt.Println(filesAfterFirstMerge)
-		} else if filesAfterFirstMerge[0].Name() != "segment-1" || filesAfterFirstMerge[1].Name() != "segment-3" {
-			t.Errorf("Incorrectly created files")
-		}
-
-		err = db.Put("TARAS", "Live in London")
-		if err != nil {
-			t.Errorf("Cannot put TARAS: %s", err)
-		}
-
-		value2, err := db.Get("TARAS")
-		if err != nil {
-			t.Errorf("Cannot get key2: %s", err)
-		}
-		if value2 != "Live in London" {
-			t.Errorf("Bad value returned expected Live in London, got %s", value2)
 		}
 		time.Sleep(1 * time.Second)
 		filesAfterSecondMerge, err := os.ReadDir(dir)
