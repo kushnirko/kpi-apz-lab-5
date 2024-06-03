@@ -16,6 +16,8 @@ var (
 	logEnabled = flag.Bool("log", true, "whether to write logs to stdout")
 )
 
+const teamName = "ryan-gosling-team"
+
 func main() {
 	flag.Parse()
 	logger.Init(*logEnabled)
@@ -24,7 +26,7 @@ func main() {
 	client.Timeout = 10 * time.Second
 
 	for range time.Tick(1 * time.Second) {
-		resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data", *target))
+		resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data?key=%s", *target, teamName))
 		if err == nil {
 			logger.Printf("response %d", resp.StatusCode)
 		} else {

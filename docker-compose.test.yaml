@@ -8,6 +8,7 @@ services:
     networks:
       - servers
     depends_on:
+      - database
       - server1
       - server2
       - server3
@@ -25,3 +26,6 @@ services:
   balancer:
     # Для тестів включаємо режим відлагодження, коли балансувальник додає інформацію, кому було відправлено запит.
     command: ["lb", "--trace=true", "--log=false"]
+
+  database:
+    command: ["db", "--temp=true", "--log=false"]

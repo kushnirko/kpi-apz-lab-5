@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/kushnirko/kpi-apz-lab-5/datastore"
@@ -77,7 +78,7 @@ func handleGetRequest(rw http.ResponseWriter, r *http.Request, db *datastore.Db)
 	case "string":
 		v, err = db.Get(k)
 	case "int64":
-		//v, err = db.GetInt64(k)
+		v, err = db.GetInt64(k)
 	default:
 		http.Error(rw, fmt.Sprintf("invalid data type %s", t), http.StatusBadRequest)
 		return
@@ -112,11 +113,11 @@ func handlePostRequest(rw http.ResponseWriter, r *http.Request, db *datastore.Db
 	case "string":
 		err = db.Put(k, rb.Value)
 	case "int64":
-		//var v int64
-		//v, err = strconv.ParseInt(rb.Value, 10, 64)
-		//if err == nil {
-		//	err = db.PutInt64(k, v)
-		//}
+		var v int64
+		v, err = strconv.ParseInt(rb.Value, 10, 64)
+		if err == nil {
+			err = db.PutInt64(k, v)
+		}
 	default:
 		err = fmt.Errorf("invalid data type %s", t)
 	}
