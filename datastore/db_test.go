@@ -252,6 +252,7 @@ func TestDb_Put_Int64_Values(t *testing.T) {
 		if size1 != outInfo.Size() {
 			t.Errorf("Unexpected size (%d vs %d)", size1, outInfo.Size())
 		}
+		outFile.Close()
 	})
 
 	t.Run("new db process", func(t *testing.T) {
