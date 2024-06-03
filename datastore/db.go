@@ -114,7 +114,7 @@ func (db *Db) processSegment(segment string, isLastSegment bool) error {
 		if n != int(size) {
 			return fmt.Errorf("corrupted file")
 		}
-		var e entry
+		var e entry[string]
 		e.Decode(data)
 		db.index[e.key] = db.outOffset + int64((fileNumber-1)*maxFileSize)
 		db.outOffset += int64(n)
@@ -167,7 +167,7 @@ func (db *Db) Get(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return value, nil
+	return any(value).(string), nil
 }
 
 func (db *Db) getReaderByOffset(offset int64) (*bufio.Reader, *os.File, error) {
@@ -197,7 +197,7 @@ func (db *Db) getOffset(key string) (int64, error) {
 }
 
 func (db *Db) Put(key, value string) error {
-	e := entry{
+	e := entry[string]{
 		key:   key,
 		value: value,
 	}
