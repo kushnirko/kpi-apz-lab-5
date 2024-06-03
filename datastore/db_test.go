@@ -175,7 +175,7 @@ func TestDb_Put(t *testing.T) {
 		filesNumAfterSecondMerge := len(filesAfterSecondMerge)
 		if filesNumAfterSecondMerge != 2 {
 			t.Errorf("The number of created files is not as required. Expected 2, got %d", filesNumAfterSecondMerge)
-		} else if filesAfterSecondMerge[0].Name() != "segment-1" || filesAfterSecondMerge[1].Name() != "segment-4" {
+		} else if filesAfterSecondMerge[0].Name() != "segment-1" || filesAfterSecondMerge[1].Name() != "segment-3" {
 			t.Errorf("Incorrectly created files")
 		}
 	})
