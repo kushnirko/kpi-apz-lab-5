@@ -32,7 +32,9 @@ type Db struct {
 	lastChangedEl   string
 	mergingSegments []string
 	mergeMu         sync.Mutex
-	putCh           chan entry
+	putCh           chan entry[string]
+	putInt64Ch      chan entry[int64]
+	getInt64Ch      chan string
 	getCh           chan string
 	getOffsetCh     chan int64
 	finishMergeCh   chan hashIndex
@@ -53,7 +55,9 @@ func NewDb(dir string) (*Db, error) {
 		mergingSegments: make([]string, 0),
 		fileNumber:      1,
 		dir:             dir,
-		putCh:           make(chan entry),
+		putCh:           make(chan entry[string]),
+		putInt64Ch:      make(chan entry[int64]),
+		getInt64Ch:      make(chan string),
 		getCh:           make(chan string),
 		getOffsetCh:     make(chan int64),
 		finishMergeCh:   make(chan hashIndex),
@@ -139,7 +143,12 @@ func (db *Db) OperationMonitor() {
 		select {
 		case e := <-db.putCh:
 			db.makeRecord(e)
+		case e := <-db.putInt64Ch:
+			db.makeRecordInt64(e)
 		case key := <-db.getCh:
+			offset, _ := db.getOffset(key)
+			db.getOffsetCh <- offset
+		case key := <-db.getInt64Ch:
 			offset, _ := db.getOffset(key)
 			db.getOffsetCh <- offset
 		case index := <-db.finishMergeCh:
@@ -211,7 +220,25 @@ func (db *Db) Put(key, value string) error {
 	return nil
 }
 
-func (db *Db) makeRecord(e entry) {
+func (db *Db) makeRecord(e entry[string]) {
+	fileInfo, err := db.out.Stat()
+	if err != nil {
+		return
+	}
+	if int64(len(e.Encode())) > (int64(maxFileSize) - fileInfo.Size()) {
+		err = db.createNewSegment()
+		if err != nil {
+			return
+		}
+	}
+	n, err := db.out.Write(e.Encode())
+	if err == nil {
+		db.index[e.key] = db.outOffset + int64((db.fileNumber-1)*maxFileSize)
+		db.outOffset += int64(n)
+	}
+}
+
+func (db *Db) makeRecordInt64(e entry[int64]) {
 	fileInfo, err := db.out.Stat()
 	if err != nil {
 		return
@@ -230,33 +257,14 @@ func (db *Db) makeRecord(e entry) {
 }
 
 func (db *Db) GetInt64(key string) (int64, error) {
-	offset, ok := db.index[key]
-	fileNumber := int(math.Floor(float64(db.index[key]/int64(maxFileSize)))) + 1
-	if !db.checkFileExistence(fileNumber) {
-		fileNumber = 1
-	}
-	outPath := filepath.Join(db.dir, outFileName+"-"+strconv.FormatInt(int64(fileNumber), 10))
-	if !ok {
-		return 0, ErrNotFound
-	}
-	position := offset - int64((fileNumber-1)*maxFileSize)
-	file, err := os.Open(outPath)
-	if err != nil {
-		return 0, err
-	}
+	db.getInt64Ch <- key
+	offset := <-db.getOffsetCh
+	reader, file, err := db.getReaderByOffset(offset)
 	defer file.Close()
-
-	_, err = file.Seek(position, 0)
-	if err != nil {
-		return 0, err
-	}
-
-	reader := bufio.NewReader(file)
 	value, err := readValue(reader)
 	if err != nil {
 		return 0, err
 	}
-
 	int64Value, ok := value.(int64)
 	if !ok {
 		return 0, fmt.Errorf("Value does not match expected type: int64")
@@ -269,23 +277,8 @@ func (db *Db) PutInt64(key string, value int64) error {
 		key:   key,
 		value: value,
 	}
-	fileInfo, err := db.out.Stat()
-	if err != nil {
-		return err
-	}
-	if int64(len(e.Encode())) > (int64(maxFileSize) - fileInfo.Size()) {
-		err = db.createNewSegment()
-		if err != nil {
-			return err
-		}
-	}
-	n, err := db.out.Write(e.Encode())
-	if err == nil {
-		db.index[key] = db.outOffset + int64((db.fileNumber-1)*maxFileSize)
-		db.outOffset += int64(n)
-	}
-
-	return err
+	db.putInt64Ch <- e
+	return nil
 }
 
 func (db *Db) createNewSegment() error {
