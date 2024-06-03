@@ -167,7 +167,13 @@ func (db *Db) Get(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return any(value).(string), nil
+
+	stingValue, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("Value does not match expected type: string")
+	}
+
+	return stingValue, nil
 }
 
 func (db *Db) getReaderByOffset(offset int64) (*bufio.Reader, *os.File, error) {
@@ -221,6 +227,65 @@ func (db *Db) makeRecord(e entry) {
 		db.index[e.key] = db.outOffset + int64((db.fileNumber-1)*maxFileSize)
 		db.outOffset += int64(n)
 	}
+}
+
+func (db *Db) GetInt64(key string) (int64, error) {
+	offset, ok := db.index[key]
+	fileNumber := int(math.Floor(float64(db.index[key]/int64(maxFileSize)))) + 1
+	if !db.checkFileExistence(fileNumber) {
+		fileNumber = 1
+	}
+	outPath := filepath.Join(db.dir, outFileName+"-"+strconv.FormatInt(int64(fileNumber), 10))
+	if !ok {
+		return 0, ErrNotFound
+	}
+	position := offset - int64((fileNumber-1)*maxFileSize)
+	file, err := os.Open(outPath)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+
+	_, err = file.Seek(position, 0)
+	if err != nil {
+		return 0, err
+	}
+
+	reader := bufio.NewReader(file)
+	value, err := readValue(reader)
+	if err != nil {
+		return 0, err
+	}
+
+	int64Value, ok := value.(int64)
+	if !ok {
+		return 0, fmt.Errorf("Value does not match expected type: int64")
+	}
+	return int64Value, nil
+}
+
+func (db *Db) PutInt64(key string, value int64) error {
+	e := entry[int64]{
+		key:   key,
+		value: value,
+	}
+	fileInfo, err := db.out.Stat()
+	if err != nil {
+		return err
+	}
+	if int64(len(e.Encode())) > (int64(maxFileSize) - fileInfo.Size()) {
+		err = db.createNewSegment()
+		if err != nil {
+			return err
+		}
+	}
+	n, err := db.out.Write(e.Encode())
+	if err == nil {
+		db.index[key] = db.outOffset + int64((db.fileNumber-1)*maxFileSize)
+		db.outOffset += int64(n)
+	}
+
+	return err
 }
 
 func (db *Db) createNewSegment() error {
