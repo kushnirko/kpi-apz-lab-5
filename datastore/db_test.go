@@ -16,7 +16,7 @@ func TestDb_Put(t *testing.T) {
 	}
 	defer func() {
 		time.Sleep(2 * time.Second)
-		err = os.RemoveAll(dir)
+		os.RemoveAll(dir)
 	}()
 	db, err := NewDb(dir, 100)
 	if err != nil {
@@ -197,14 +197,13 @@ func TestDb_Put_Int64_Values(t *testing.T) {
 	}
 	defer func() {
 		time.Sleep(2 * time.Second)
-		err = os.RemoveAll(dir)
+		os.RemoveAll(dir)
 	}()
 	db, err := NewDb(dir, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-
 	pairs := [][]any{
 		{"key1", int64(42)},
 		{"key2", int64(1984)},
@@ -260,7 +259,6 @@ func TestDb_Put_Int64_Values(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		outFile.Close()
 	})
 
 	t.Run("new db process", func(t *testing.T) {
