@@ -249,6 +249,7 @@ func (db *Db) makeRecord(e entry[string]) {
 		return
 	}
 	if int64(len(e.Encode())) > (int64(db.segmentSize) - fileInfo.Size()) {
+		db.lastChangedEl = e.key
 		err = db.createNewSegment()
 		if err != nil {
 			return
@@ -267,6 +268,7 @@ func (db *Db) makeRecordInt64(e entry[int64]) {
 		return
 	}
 	if int64(len(e.Encode())) > (int64(db.segmentSize) - fileInfo.Size()) {
+		db.lastChangedEl = e.key
 		err = db.createNewSegment()
 		if err != nil {
 			return
