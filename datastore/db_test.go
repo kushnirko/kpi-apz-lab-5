@@ -10,20 +10,19 @@ import (
 )
 
 func TestDb_Put(t *testing.T) {
-	maxFileSize = 100 // Some tests depend on this value
-
 	dir, err := ioutil.TempDir("", "test-db")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-
-	db, err := NewDb(dir)
+	defer func() {
+		time.Sleep(2 * time.Second)
+		err = os.RemoveAll(dir)
+	}()
+	db, err := NewDb(dir, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-
 	pairs := [][]string{
 		{"key1", "value1"},
 		{"key2", "value2"},
@@ -51,7 +50,7 @@ func TestDb_Put(t *testing.T) {
 		if err != nil {
 			t.Errorf("Cannot put in file: %s", err)
 		}
-		time.Sleep(10 * time.Nanosecond)
+		time.Sleep(1 * time.Second)
 		files, err := os.ReadDir(dir)
 		if err != nil {
 			t.Fatal(err)
@@ -86,7 +85,7 @@ func TestDb_Put(t *testing.T) {
 		if err != nil {
 			t.Errorf("Cannot put in file: %s", err)
 		}
-		time.Sleep(10 * time.Nanosecond)
+		time.Sleep(1 * time.Second)
 		outInfo1, err := outFile1.Stat()
 		if err != nil {
 			t.Fatal(err)
@@ -120,7 +119,7 @@ func TestDb_Put(t *testing.T) {
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
 		}
-		db, err = NewDb(dir)
+		db, err = NewDb(dir, 100)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -154,7 +153,6 @@ func TestDb_Put(t *testing.T) {
 	})
 
 	t.Run("merge segments", func(t *testing.T) {
-
 		err := db.Put("specialKey", "VALUE_FOR_SPECIAL_KEY")
 		if err != nil {
 			t.Errorf("Cannot put specialKey: %s", err)
@@ -167,7 +165,7 @@ func TestDb_Put(t *testing.T) {
 		if value1 != "someOTHERvalue" {
 			t.Errorf("Bad value returned expected someOTHERvalue, got %s", value1)
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(2 * time.Second)
 		filesAfterSecondMerge, err := os.ReadDir(dir)
 		if err != nil {
 			t.Fatal(err)
@@ -186,8 +184,8 @@ func TestDb_Put(t *testing.T) {
 			t.Errorf("Cannot put %s: %s", any(pairs[0]).(string), err)
 		}
 		_, err := db.Get("keyI")
-		if err.Error() != "Value does not match expected type: string" {
-			t.Errorf("Unexpected error")
+		if err.Error() != "value does not match expected type: string" {
+			t.Errorf("Unexpected error %v", err)
 		}
 	})
 }
@@ -197,14 +195,15 @@ func TestDb_Put_Int64_Values(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-
-	db, err := NewDb(dir)
+	defer func() {
+		time.Sleep(2 * time.Second)
+		err = os.RemoveAll(dir)
+	}()
+	db, err := NewDb(dir, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-
 	pairs := [][]any{
 		{"key1", int64(42)},
 		{"key2", int64(1984)},
@@ -242,6 +241,10 @@ func TestDb_Put_Int64_Values(t *testing.T) {
 		for _, pair := range pairs {
 			err = db.PutInt64(pair[0].(string), pair[1].(int64))
 		}
+		outInfo, err := outFile.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
 		if err != nil {
 			t.Errorf("Cannot put %s: %s", any(pairs[0]).(string), err)
 		}
@@ -252,13 +255,17 @@ func TestDb_Put_Int64_Values(t *testing.T) {
 		if size1 != outInfo.Size() {
 			t.Errorf("Unexpected size (%d vs %d)", size1, outInfo.Size())
 		}
+		err = outFile.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	t.Run("new db process", func(t *testing.T) {
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
 		}
-		db, err = NewDb(dir)
+		db, err = NewDb(dir, 100)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -279,9 +286,20 @@ func TestDb_Put_Int64_Values(t *testing.T) {
 		if err != nil {
 			t.Errorf("Cannot put %s: %s", any(pairs[0]).(string), err)
 		}
-		_, err := db.GetInt64("keyS")
-		if err.Error() != "Value does not match expected type: int64" {
-			t.Errorf("Unexpected error")
+		_, err = db.GetInt64("keyS")
+		if err.Error() != "value does not match expected type: int64" {
+			t.Errorf("Unexpected error %v", err)
+		}
+	})
+
+	t.Run("", func(t *testing.T) {
+		err = db.Put("keyS", "value")
+		if err != nil {
+			t.Errorf("Cannot put %s: %s", any(pairs[0]).(string), err)
+		}
+		_, err = db.GetInt64("keyS")
+		if err.Error() != "value does not match expected type: int64" {
+			t.Errorf("Unexpected error %v", err)
 		}
 	})
 }
