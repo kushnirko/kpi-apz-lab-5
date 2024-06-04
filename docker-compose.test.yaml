@@ -28,4 +28,4 @@ services:
     command: ["lb", "--trace=true", "--log=false"]
 
   database:
-    command: ["db", "--temp=true", "--log=false"]
+    command: ["db", "--temp=true", "--log=false", "--segment=100"]

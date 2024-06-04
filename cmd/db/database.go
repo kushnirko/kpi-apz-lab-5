@@ -18,9 +18,10 @@ import (
 )
 
 var (
-	port = flag.Int("port", 8080, "server port")
-	path = flag.String("from", "", "recover database from disk")
-	temp = flag.Bool("temp", false, "create temporary database")
+	port        = flag.Int("port", 8080, "server port")
+	path        = flag.String("from", "", "recover database from disk")
+	temp        = flag.Bool("temp", false, "create temporary database")
+	segmentSize = flag.Int("segment", 10*1024*1024, "size of database segment")
 
 	logEnabled = flag.Bool("log", true, "whether to write logs to stdout")
 )
@@ -137,7 +138,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db, err := datastore.NewDb(dir)
+	db, err := datastore.NewDb(dir, *segmentSize)
 	if err != nil {
 		log.Fatal(err)
 	}
