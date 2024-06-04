@@ -454,11 +454,6 @@ func (db *Db) getSegmentNumbers() []int {
 	return segmentNumbers
 }
 
-func (db *Db) checkFileExistence(filePath string) bool {
-	_, err := os.Stat(filePath)
-	return !os.IsNotExist(err)
-}
-
 func (db *Db) checkFileNumberExistence(number int) bool {
 	for _, v := range db.segmentNumbers {
 		if v == number {
