@@ -8,6 +8,8 @@ services:
   balancer:
     build: .
     command: "lb"
+    depends_on:
+      - database
     networks:
       - servers
     ports:
@@ -15,6 +17,8 @@ services:
 
   server1:
     build: .
+    depends_on:
+      - database
     networks:
       - servers
     ports:
@@ -22,6 +26,8 @@ services:
 
   server2:
     build: .
+    depends_on:
+      - database
     networks:
       - servers
     ports:
@@ -29,7 +35,17 @@ services:
 
   server3:
     build: .
+    depends_on:
+      - database
     networks:
       - servers
     ports:
       - "8082:8080"
+
+  database:
+    build: .
+    command: ["db", "--temp=true"]
+    networks:
+      - servers
+    ports:
+      - "8083:8080"

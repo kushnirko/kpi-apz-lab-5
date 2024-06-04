@@ -2,6 +2,7 @@ package integration
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"sync"
@@ -11,7 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const baseAddress = "http://balancer:8090"
+const (
+	baseAddress = "http://balancer:8090"
+	teamName    = "ryan-gosling-team"
+)
 
 var client = http.Client{
 	Timeout: 3 * time.Second,
@@ -45,16 +49,25 @@ func TestBalancer(t *testing.T) {
 			defer wg.Done()
 
 			for j := 0; j < requestsNum/clientsNum; j++ {
-				url := fmt.Sprintf("%s/api/v1/some-data", baseAddress)
+				url := fmt.Sprintf("%s/api/v1/some-data?key=%s", baseAddress, teamName)
 				resp, err := client.Get(url)
 				assert.NoError(t, err)
+
 				assert.Equal(t, http.StatusOK, resp.StatusCode,
 					"bad response status",
 				)
+
+				body, err := io.ReadAll(resp.Body)
+				assert.NoError(t, err)
+				assert.NotEmpty(t, string(body),
+					"empty response body",
+				)
+
 				server := resp.Header.Get("lb-from")
 				assert.NotEmpty(t, server,
 					"no 'lb-from' header in response",
 				)
+
 				rc.Increment(server)
 				resp.Body.Close()
 			}

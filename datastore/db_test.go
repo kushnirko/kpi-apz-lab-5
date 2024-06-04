@@ -204,6 +204,7 @@ func TestDb_Put_Int64_Values(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+
 	pairs := [][]any{
 		{"key1", int64(42)},
 		{"key2", int64(1984)},
@@ -259,6 +260,7 @@ func TestDb_Put_Int64_Values(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		outFile.Close()
 	})
 
 	t.Run("new db process", func(t *testing.T) {
@@ -269,7 +271,6 @@ func TestDb_Put_Int64_Values(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
 		for _, pair := range pairs {
 			value, err := db.GetInt64(pair[0].(string))
 			if err != nil {

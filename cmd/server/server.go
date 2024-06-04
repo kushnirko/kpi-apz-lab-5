@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -19,8 +23,29 @@ var (
 	logEnabled = flag.Bool("log", true, "whether to write logs to stdout")
 )
 
-const confResponseDelaySec = "CONF_RESPONSE_DELAY_SEC"
-const confHealthFailure = "CONF_HEALTH_FAILURE"
+const (
+	confResponseDelaySec = "CONF_RESPONSE_DELAY_SEC"
+	confHealthFailure    = "CONF_HEALTH_FAILURE"
+
+	database = "http://database:8080/db"
+	teamName = "ryan-gosling-team"
+)
+
+func sendTimestamp() {
+	body := new(bytes.Buffer)
+	json.NewEncoder(body).Encode(struct {
+		Value string `json:"value"`
+	}{
+		Value: time.Now().Format("2006-01-02"),
+	})
+
+	c := http.DefaultClient
+	resp, err := c.Post(fmt.Sprintf("%s/%s", database, teamName), "application/json", body)
+	if err != nil {
+		log.Printf("failed to send timestamp: %v", err)
+	}
+	resp.Body.Close()
+}
 
 func main() {
 	flag.Parse()
@@ -47,18 +72,36 @@ func main() {
 			time.Sleep(time.Duration(delaySec) * time.Second)
 		}
 
+		k := r.URL.Query().Get("key")
+		if k == "" {
+			rw.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		c := http.DefaultClient
+		resp, err := c.Get(fmt.Sprintf("%s/%s", database, k))
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+
 		report.Process(r)
 
 		rw.Header().Set("content-type", "application/json")
-		rw.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(rw).Encode([]string{
-			"1", "2",
-		})
+		rw.WriteHeader(resp.StatusCode)
+
+		if resp.StatusCode == http.StatusOK {
+			if _, err = io.Copy(rw, resp.Body); err != nil {
+				rw.WriteHeader(http.StatusInternalServerError)
+			}
+		}
 	})
 
 	h.Handle("/report", report)
 
 	server := httptools.CreateServer(*port, h)
 	server.Start()
+	sendTimestamp()
 	signal.WaitForTerminationSignal()
 }
