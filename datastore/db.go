@@ -79,6 +79,13 @@ func (db *Db) recover() error {
 	if err != nil {
 		return err
 	}
+	_, err = os.Stat("temp")
+	if !os.IsNotExist(err) {
+		err = os.Rename("temp", outFileName+"-1")
+		if err != nil {
+			return err
+		}
+	}
 	for i, segment := range segments {
 		if err := db.processSegment(segment, i == len(segments)-1); err != nil {
 			return err
@@ -397,10 +404,6 @@ func (db *Db) finishMergingSegments(index hashIndex) error {
 	if err != nil {
 		return err
 	}
-	err = os.Rename("temp", outFileName+"-1")
-	if err != nil {
-		return err
-	}
 	return err
 }
 
@@ -449,6 +452,11 @@ func (db *Db) getSegmentNumbers() []int {
 		segmentNumbers = append(segmentNumbers, number)
 	}
 	return segmentNumbers
+}
+
+func (db *Db) checkFileExistence(filePath string) bool {
+	_, err := os.Stat(filePath)
+	return !os.IsNotExist(err)
 }
 
 func (db *Db) checkFileNumberExistence(number int) bool {
