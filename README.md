@@ -1,6 +1,6 @@
-# Laboratory work 4
+# Laboratory work 5
 
-## Horizontal scaling of software systems
+## Key-value databases and atomic operations
 
 ### Components of software engineering. Part 3. Software architecture
 
