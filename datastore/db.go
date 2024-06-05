@@ -160,10 +160,10 @@ func (db *Db) OperationMonitor() {
 		case e := <-db.putInt64Ch:
 			db.makeRecordInt64(e)
 		case key := <-db.getCh:
-			offset, _ := db.getOffset(key)
+			offset := db.getOffset(key)
 			db.getOffsetCh <- offset
 		case key := <-db.getInt64Ch:
-			offset, _ := db.getOffset(key)
+			offset := db.getOffset(key)
 			db.getOffsetCh <- offset
 		case index := <-db.finishMergeCh:
 			err := db.finishMergingSegments(index)
@@ -185,6 +185,9 @@ func (db *Db) Close() error {
 func (db *Db) Get(key string) (string, error) {
 	db.getCh <- key
 	offset := <-db.getOffsetCh
+	if offset == -1 {
+		return "", ErrNotFound
+	}
 	reader, file, err := db.getReaderByOffset(offset)
 	if err != nil {
 		return "", err
@@ -226,12 +229,12 @@ func (db *Db) getReaderByOffset(offset int64) (*bufio.Reader, *os.File, error) {
 	return bufio.NewReader(file), file, nil
 }
 
-func (db *Db) getOffset(key string) (int64, error) {
+func (db *Db) getOffset(key string) int64 {
 	offset, ok := db.index[key]
 	if !ok {
-		return offset, ErrNotFound
+		return -1
 	}
-	return offset, nil
+	return offset
 }
 
 func (db *Db) Put(key, value string) error {
@@ -284,6 +287,9 @@ func (db *Db) makeRecordInt64(e entry[int64]) {
 func (db *Db) GetInt64(key string) (int64, error) {
 	db.getInt64Ch <- key
 	offset := <-db.getOffsetCh
+	if offset == -1 {
+		return 0, ErrNotFound
+	}
 	reader, file, err := db.getReaderByOffset(offset)
 	defer func(file *os.File) {
 		err := file.Close()
