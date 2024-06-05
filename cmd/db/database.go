@@ -92,9 +92,7 @@ func handleGetRequest(rw http.ResponseWriter, r *http.Request, db *datastore.Db)
 	rw.Header().Set("content-type", "application/json")
 	if err = json.NewEncoder(rw).Encode(responseBody{Key: k, Value: v}); err != nil {
 		http.Error(rw, "json encoding error", http.StatusInternalServerError)
-		return
 	}
-	rw.WriteHeader(http.StatusOK)
 }
 
 func handlePostRequest(rw http.ResponseWriter, r *http.Request, db *datastore.Db) {
