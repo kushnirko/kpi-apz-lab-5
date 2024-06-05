@@ -148,10 +148,6 @@ func main() {
 
 	h := new(http.ServeMux)
 	h.HandleFunc("/db/", func(rw http.ResponseWriter, r *http.Request) {
-
-		log.Println(r.URL.Path)
-		log.Println(r.Method)
-
 		switch r.Method {
 		case "GET":
 			handleGetRequest(rw, r, db)
