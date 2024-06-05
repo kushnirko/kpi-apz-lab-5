@@ -81,9 +81,17 @@ func (db *Db) recover() error {
 	}
 	_, err = os.Stat("temp")
 	if !os.IsNotExist(err) {
-		err = os.Rename("temp", outFileName+"-1")
-		if err != nil {
-			return err
+		_, err = os.Stat(outFileName + "-1")
+		if !os.IsNotExist(err) {
+			err = os.Remove("temp")
+			if err != nil {
+				return err
+			}
+		} else {
+			err = os.Rename("temp", outFileName+"-1")
+			if err != nil {
+				return err
+			}
 		}
 	}
 	for i, segment := range segments {
