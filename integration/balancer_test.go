@@ -105,7 +105,7 @@ func BenchmarkBalancer(b *testing.B) {
 	}
 
 	for i := 0; i < b.N; i++ {
-		url := fmt.Sprintf("%s/api/v1/some-data", baseAddress)
+		url := fmt.Sprintf("%s/api/v1/some-data?key=%s", baseAddress, teamName)
 		resp, err := client.Get(url)
 		assert.NoError(b, err)
 		assert.Equal(b, http.StatusOK, resp.StatusCode,
